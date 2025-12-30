@@ -1,45 +1,76 @@
 # Period Prediction Tool
 
-A Python-based tool for predicting future menstrual cycles and visualizing 
-period probabilities using historical cycle data. Ideal if you're planning 
-vacations or other events long time ahead.
+> [!NOTE]
+> **This code was written by Claude Sonnet 4.5** 🤖
 
-## Features
+A sophisticated Python-based tool for predicting future menstrual cycles using Monte Carlo simulations. Unlike simple period tracking apps that predict specific dates, this tool shows **probability distributions** for each day, accounting for natural cycle variability. Perfect for vacation planning and long-term scheduling.
 
-- Predicts future period start dates based on historical cycle data
-- Generates interactive visualizations of period probabilities
+## Key Features
+
+- **Monte Carlo Simulation**: Runs 10,000+ simulations to model cycle variability
+- **Probability-Based Predictions**: Shows likelihood of having your period on each day (not just single dates)
+- **12-Month Forecast**: Generates predictions for the next year with increasing uncertainty over time
+- **Multiple Visualizations**:
+  - Daily probability bar charts for each month
+  - Calendar heatmap view showing risk levels
+  - Historical cycle and period duration analysis
+- **Interactive HTML Report**: Hover over dates to see exact probabilities
+
+## How It Works
+
+The algorithm uses your historical cycle data to:
+1. Calculate the distribution of your cycle lengths (mean ± standard deviation)
+2. Model period duration variability
+3. Run thousands of simulations with random sampling from these distributions
+4. Aggregate results to show the probability of having your period on each future day
+
+**Key Insight**: Predictions become "fuzzier" further into the future because cycle variability compounds over time. This is realistic and helps you identify truly safe dates vs. risky ones.
 
 ## Prerequisites
 
-- Python 3.7+
+- Python 3.9+
 
 ## Installation
 
 Install the required packages:
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
 
-1. Prepare your cycle data in a CSV file named `cycle_data.csv` with the following format:
+1. Prepare your cycle data in a CSV file named `cycle_data.csv`:
    ```
-   start_date,end_date,cycle_length
-   YYYY-MM-DD,YYYY-MM-DD,28
-   YYYY-MM-DD,YYYY-MM-DD,27
+   start_date,end_date,cycle_length,period_duration
+   2025-11-13,2025-12-11,29,7
+   2025-10-19,2025-11-12,25,6
    ...
    ```
-- `start_date`: The first day of the period (YYYY-MM-DD)
-- `end_date`: The last day of the period (YYYY-MM-DD)
-- `cycle_length`: Length of the cycle in days
+   - `start_date`: First day of your period (YYYY-MM-DD)
+   - `end_date`: Date before next period starts (YYYY-MM-DD)
+   - `cycle_length`: Days from this period start to next period start
+   - `period_duration`: Number of days your period lasted (bleeding days)
 
 2. Run the prediction script:
    ```bash
    python period_prediction.py
    ```
 
-3. The script will generate an interactive HTML visualization showing predicted period probabilities
-under `period_prediction_report.html`
+3. Open the generated `period_prediction_report.html` in your browser
+
+## Interpreting Results
+
+- **Probability < 10%**: Very unlikely - safe for planning
+- **Probability 10-30%**: Low risk - generally safe
+- **Probability 30-50%**: Moderate risk - consider backup plans
+- **Probability 50-70%**: High risk - likely to have period
+- **Probability > 70%**: Very high risk - avoid if possible
+
+## Advanced Options
+
+```bash
+python period_prediction.py --csv your_data.csv --output report.html --simulations 20000
+```
 
 ## License
 

@@ -1,4 +1,5 @@
 pandas
-scikit-learn
-python-dateutil
+numpy
+scipy
 plotly
+python-dateutil
