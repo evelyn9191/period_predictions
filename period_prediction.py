@@ -19,7 +19,14 @@ class PeriodPredictor:
         self.cycle_sigma = np.std(self.cycle_lengths)
         self.period_mu = np.mean(self.period_durations)
         self.period_sigma = np.std(self.period_durations) if len(self.period_durations) > 1 else 0.5
-        
+
+    def split_by_month(self, date_range):
+        months = {}
+        for i, d in enumerate(date_range):
+            key = d.strftime("%Y-%m")
+            months.setdefault(key, []).append(i)
+        return months
+
     def simulate_future_cycles(self, n_simulations: int = 10000, forecast_months: int = 12) -> Tuple[pd.DatetimeIndex, np.ndarray]:
         start_date = self.last_period_start
         end_date = start_date + timedelta(days=forecast_months * 31 + 60)
@@ -48,96 +55,99 @@ class PeriodPredictor:
     def calculate_probabilities(self, simulations: np.ndarray) -> np.ndarray:
         return simulations.mean(axis=0)
 
-    def _create_heatmap(self, df: pd.DataFrame) -> go.Figure:
-        df_future = df[df['date'] >= self.last_period_start].copy()
-        df_future['year_month'] = df_future['date'].dt.to_period('M')
-        months = df_future['year_month'].unique()[:12]
-        
-        n_months = min(12, len(months))
-        fig = make_subplots(
-            rows=4,
-            cols=3,
-            subplot_titles=[f"{m.strftime('%B %Y')}" for m in months[:n_months]],
-            vertical_spacing=0.12,
-            horizontal_spacing=0.08
-        )
-        
-        for idx, month in enumerate(months[:n_months]):
-            row = (idx // 3) + 1
-            col = (idx % 3) + 1
-            
-            month_start = month.to_timestamp()
-            month_end = (month + 1).to_timestamp() - timedelta(days=1)
-            
-            month_df = df_future[df_future['year_month'] == month].copy()
-            
-            first_weekday = month_start.weekday()
-            days_in_month = (month_end - month_start).days + 1
-            
-            grid = np.full((6, 7), np.nan)
-            day_labels = np.full((6, 7), '', dtype=object)
-            hover_text = np.full((6, 7), '', dtype=object)
-            
-            for day in range(1, days_in_month + 1):
-                current_date = month_start + timedelta(days=day - 1)
-                weekday = current_date.weekday()
-                week = (day + first_weekday - 1) // 7
-                
-                if week < 6:
-                    prob_row = month_df[month_df['date'] == current_date]
-                    if not prob_row.empty:
-                        probability = prob_row['probability'].values[0]
-                        grid[week, weekday] = probability
-                        day_labels[week, weekday] = str(day)
-                        hover_text[week, weekday] = f"{current_date.strftime('%a %b %d')}<br>Probability: {probability:.1%}"
-                    else:
-                        grid[week, weekday] = 0
-                        day_labels[week, weekday] = str(day)
-                        hover_text[week, weekday] = f"{current_date.strftime('%a %b %d')}<br>No data"
-            
-            heatmap = go.Heatmap(
-                z=grid,
-                x=['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                y=['', '', '', '', '', ''],
-                colorscale=[
-                    [0, '#ffffff'],
-                    [0.05, '#fff5eb'],
-                    [0.15, '#fee6ce'],
-                    [0.30, '#fdd0a2'],
-                    [0.45, '#fdae6b'],
-                    [0.60, '#fd8d3c'],
-                    [0.75, '#f16913'],
-                    [0.90, '#d94801'],
-                    [1.0, '#8c2d04']
-                ],
-                zmin=0,
-                zmax=1,
-                showscale=(idx == n_months - 1),
-                text=day_labels,
-                texttemplate='%{text}',
-                textfont=dict(size=10),
-                hovertext=hover_text,
-                hoverinfo='text',
-                colorbar=dict(
-                    title='Probability',
-                    x=1.02,
-                    tickformat='.0%',
-                    len=0.5
-                ) if idx == n_months - 1 else None
+    def create_monthly_scatter(
+            self,
+            date_range,
+            simulations,
+            probabilities,
+            month_indices,
+            title
+    ):
+        xs, ys = [], []
+
+        for sim_idx in range(simulations.shape[0]):
+            sim_days = np.where(simulations[sim_idx, month_indices])[0]
+            xs.extend(date_range[month_indices][sim_days])
+            ys.extend(
+                sim_idx + np.random.uniform(-0.3, 0.3, size=len(sim_days))
             )
-            
-            fig.add_trace(heatmap, row=row, col=col)
-        
-        fig.update_xaxes(showticklabels=True, side='top')
-        fig.update_yaxes(showticklabels=False)
-        
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Scattergl(
+            x=xs,
+            y=ys,
+            mode='markers',
+            marker=dict(size=2, color='rgba(255, 80, 80, 0.25)'),
+            name='Simulated periods'
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=date_range[month_indices],
+            y=probabilities[month_indices] * simulations.shape[0],
+            mode='lines',
+            line=dict(color='black', width=2),
+            name='Daily probability'
+        ))
+
         fig.update_layout(
-            title='Period Probability Calendar - Next 12 Months',
-            height=1000,
-            showlegend=False,
-            margin=dict(l=50, r=120, t=100, b=50)
+            title=title,
+            xaxis_title="Date",
+            yaxis_title="Simulation index / probability scale",
+            height=350,
+            showlegend=False
         )
-        
+
+        return fig
+
+    def _create_scatter_plot(
+            self,
+            date_range: pd.DatetimeIndex,
+            simulations: np.ndarray,
+            probabilities: np.ndarray
+    ) -> go.Figure:
+
+        # Extract dot cloud
+        xs = []
+        ys = []
+
+        for sim_idx in range(simulations.shape[0]):
+            sim_days = np.where(simulations[sim_idx])[0]
+            xs.extend(date_range[sim_days])
+            ys.extend([sim_idx] * len(sim_days))
+
+        scatter = go.Scatter(
+            x=xs,
+            y=ys,
+            mode="markers",
+            marker=dict(
+                size=3,
+                opacity=0.05,
+                color="#e74c3c"
+            ),
+            name="Monte Carlo simulations",
+            hoverinfo="skip"
+        )
+
+        # Probability curve (scaled for visibility)
+        prob_line = go.Scatter(
+            x=date_range,
+            y=probabilities * simulations.shape[0],
+            mode="lines",
+            line=dict(color="#2c3e50", width=3),
+            name="Daily probability (scaled)"
+        )
+
+        fig = go.Figure(data=[scatter, prob_line])
+
+        fig.update_layout(
+            title="Monte Carlo Period Prediction (Dot Density = Likelihood)",
+            xaxis_title="Date",
+            yaxis_title="Simulation index / probability scale",
+            height=600,
+            showlegend=True
+        )
+
         return fig
 
     def _create_cycle_distribution_plot(self) -> go.Figure:
@@ -198,121 +208,119 @@ class PeriodPredictor:
         )
         
         return fig
-    
-    def generate_html_report(self, date_range: pd.DatetimeIndex, probabilities: np.ndarray, output_file: str = 'period_prediction_report.html'):
-        """Generate an interactive HTML report with period predictions."""
-        # Create DataFrame with results
-        df = pd.DataFrame({
-            'date': date_range,
-            'probability': probabilities,
-            'month': date_range.month_name(),
-            'day': date_range.day,
-            'year': date_range.year
-        })
-        
-        # Create figures
-        heatmap_fig = self._create_heatmap(df)
-        dist_fig = self._create_cycle_distribution_plot()
-        
-        high_risk_days = df[df['probability'] > 0.5].copy()
-        high_risk_days['date_str'] = high_risk_days['date'].dt.strftime('%b %d, %Y')
-        
-        stats_text = f"""
-        <h2>Cycle Statistics</h2>
-        <ul>
-            <li><strong>Average cycle length:</strong> {self.cycle_mu:.1f} ± {self.cycle_sigma:.1f} days</li>
-            <li><strong>Cycle range:</strong> {min(self.cycle_lengths)} - {max(self.cycle_lengths)} days</li>
-            <li><strong>Average period duration:</strong> {self.period_mu:.1f} ± {self.period_sigma:.1f} days</li>
-            <li><strong>Period range:</strong> {min(self.period_durations)} - {max(self.period_durations)} days</li>
-            <li><strong>Data points:</strong> {len(self.cycle_data)} cycles</li>
-            <li><strong>Last period start:</strong> {self.last_period_start.strftime('%b %d, %Y')}</li>
-        </ul>
-        
-        <h2>Interpretation Guide</h2>
-        <ul>
-            <li><strong>Probability &lt; 10%:</strong> Very unlikely - safe for planning</li>
-            <li><strong>Probability 10-30%:</strong> Low risk - generally safe</li>
-            <li><strong>Probability 30-50%:</strong> Moderate risk - consider backup plans</li>
-            <li><strong>Probability 50-70%:</strong> High risk - likely to have period</li>
-            <li><strong>Probability &gt; 70%:</strong> Very high risk - avoid if possible</li>
-        </ul>
-        
-        <p><em>Note: Predictions become less certain further into the future due to natural cycle variability.</em></p>
+
+    def generate_html_report(
+            self,
+            date_range: pd.DatetimeIndex,
+            simulations: np.ndarray,
+            probabilities: np.ndarray,
+            output_file: str = "period_prediction_report.html",
+    ):
+        import numpy as np
+        import plotly.graph_objects as go
+        from plotly.io import to_html
+
+        # --------------------------------------------------
+        # 1. Split date indices by calendar month
+        # --------------------------------------------------
+        months = {}
+        for i, d in enumerate(date_range):
+            key = d.strftime("%Y-%m")
+            months.setdefault(key, []).append(i)
+
+        figures = []
+
+        # --------------------------------------------------
+        # 2. Create one figure per month
+        # --------------------------------------------------
+        for month, indices in months.items():
+            indices = np.array(indices)
+
+            xs, ys = [], []
+
+            # Monte Carlo scatter
+            for sim_idx in range(simulations.shape[0]):
+                sim_days = np.where(simulations[sim_idx, indices])[0]
+
+                xs.extend(date_range[indices][sim_days])
+                ys.extend(
+                    sim_idx
+                    + np.random.uniform(-0.3, 0.3, size=len(sim_days))
+                )
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Scattergl(
+                x=xs,
+                y=ys,
+                mode="markers",
+                marker=dict(
+                    size=2,
+                    color="rgba(255, 80, 80, 0.25)"
+                ),
+                name="Simulated periods"
+            ))
+
+            # Probability line (scaled to simulation count)
+            fig.add_trace(go.Scatter(
+                x=date_range[indices],
+                y=probabilities[indices] * simulations.shape[0],
+                mode="lines",
+                line=dict(color="black", width=2),
+                name="Daily probability"
+            ))
+
+            # X-axis ticks: show every day number
+            tick_vals = date_range[indices]
+            tick_text = [d.day for d in tick_vals]
+
+            month_title = tick_vals[0].strftime("%B %Y")
+            fig.update_layout(
+                title=month_title,
+                xaxis=dict(
+                    tickmode="array",
+                    tickvals=tick_vals,
+                    ticktext=tick_text,
+                    tickangle=0,
+                    title=None,
+                ),
+                yaxis_title="Simulation index / probability scale",
+                height=350,
+                showlegend=False,
+                margin=dict(l=40, r=20, t=50, b=40),
+            )
+
+            figures.append(fig)
+
+        # --------------------------------------------------
+        # 3. Render ALL figures into ONE HTML file
+        # --------------------------------------------------
+        html_parts = [
+            to_html(fig, full_html=False, include_plotlyjs="cdn")
+            for fig in figures
+        ]
+
+        html = f"""
+        <html>
+        <head>
+            <title>Period Prediction Report</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>Period Prediction — Monthly View</h1>
+            {''.join(html_parts)}
+        </body>
+        </html>
         """
-        
-        # Create HTML report
-        try:
-            # Convert figures to JSON strings first to catch any serialization errors
-            dist_json = dist_fig.to_json()
-            heatmap_json = heatmap_fig.to_json()
-            
-            # Create HTML content with proper escaping
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Period Prediction Report</title>
-                <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                    .container {{ max-width: 1200px; margin: 0 auto; }}
-                    .plot-container {{ margin: 30px 0; }}
-                    .stats {{ background-color: #f9f9f9; padding: 20px; border-radius: 5px; }}
-                    h1 {{ color: #2c3e50; }}
-                    h2 {{ color: #3498db; margin-top: 30px; }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>Period Prediction Report</h1>
-                    <p>Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    
-                    <div class="stats">
-                        {stats_text}
-                    </div>
-                    
-                    <div class="plot-container">
-                        <h2>Historical Cycle Analysis</h2>
-                        <div id="dist-plot"></div>
-                    </div>
-                    
-                    <div class="plot-container">
-                        <h2>Period Probability Calendar Heatmap</h2>
-                        <div id="heatmap"></div>
-                    </div>
-                </div>
-                
-                <script>
-                    // Initialize with empty data
-                    const distData = {dist_json};
-                    const heatmapData = {heatmap_json};
-                    
-                    // Render plots after page loads
-                    document.addEventListener('DOMContentLoaded', function() {{
-                        try {{
-                            Plotly.newPlot('dist-plot', distData.data, distData.layout);
-                            Plotly.newPlot('heatmap', heatmapData.data, heatmapData.layout);
-                        }} catch (e) {{
-                            console.error('Error rendering plots:', e);
-                        }}
-                    }});
-                </script>
-            </body>
-            </html>
-            """
-            
-            # Write to file
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-                
-        except Exception as e:
-            print(f"Error generating HTML report: {str(e)}")
-            print("Please report this issue with the error message above.")
-            raise
-        
-        print(f"Report generated: {os.path.abspath(output_file)}")
+
+        with open(output_file, "w") as f:
+            f.write(html)
+
         return output_file
-    
 
 def parse_cycle_data(csv_file: str) -> List[Tuple[datetime, datetime, int, int]]:
     try:
@@ -334,7 +342,7 @@ def main():
     parser = argparse.ArgumentParser(description='Predict future period probabilities.')
     parser.add_argument('--csv', type=str, default='cycle_data.csv',
                       help='Path to CSV file with cycle data')
-    parser.add_argument('--output', type=str, default='period_prediction_report.html',
+    parser.add_argument('--output', type=str, default=f'period_prediction_report_{datetime.now().month}_{datetime.now().year}.html',
                       help='Output HTML report file')
     parser.add_argument('--simulations', type=int, default=10000,
                       help='Number of Monte Carlo simulations')
@@ -359,7 +367,7 @@ def main():
     probabilities = predictor.calculate_probabilities(simulations)
     
     print("Generating report...")
-    report_file = predictor.generate_html_report(date_range, probabilities, args.output)
+    report_file = predictor.generate_html_report(date_range, simulations,probabilities, args.output)
     
     print("\n" + "="*60)
     print("ANALYSIS COMPLETE")

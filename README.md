@@ -1,19 +1,18 @@
 # Period Prediction Tool
 
 > [!NOTE]
-> **This code was written by Claude Sonnet 4.5** 🤖
+> **This code was written by SWE-1, Claude Sonnet 4.5, and GPT-5** 🤖
 
-A sophisticated Python-based tool for predicting future menstrual cycles using Monte Carlo simulations. Unlike simple period tracking apps that predict specific dates, this tool shows **probability distributions** for each day, accounting for natural cycle variability. Perfect for vacation planning and long-term scheduling.
+A Python-based tool for predicting future menstrual cycles using Monte Carlo simulations. 
+Unlike simple period tracking apps that predict specific dates and are not very accurate 
+especially when it comes to long-term predictions, this tool shows **probability distributions** for each day, 
+accounting for natural cycle variability. Perfect for vacation planning and long-term scheduling.
 
 ## Key Features
 
 - **Monte Carlo Simulation**: Runs 10,000+ simulations to model cycle variability
 - **Probability-Based Predictions**: Shows likelihood of having your period on each day (not just single dates)
-- **12-Month Forecast**: Generates predictions for the next year with increasing uncertainty over time
-- **Multiple Visualizations**:
-  - Daily probability bar charts for each month
-  - Calendar heatmap view showing risk levels
-  - Historical cycle and period duration analysis
+- **12-Month Forecast**: Generates predictions for the next year
 - **Interactive HTML Report**: Hover over dates to see exact probabilities
 
 ## How It Works
@@ -39,7 +38,8 @@ pip install -r requirements.txt
 
 ## Usage
 
-1. Prepare your cycle data in a CSV file named `cycle_data.csv`:
+1. Prepare your cycle data in a CSV file named `cycle_data.csv` (see [cycle_data_sample.csv](cycle_data_sample.csv) for an example). 
+You can e.g. printscreen your menstrual calendar app and ask AI to convert it into a CSV file with the following format:
    ```
    start_date,end_date,cycle_length,period_duration
    2025-11-13,2025-12-11,29,7
