@@ -219,6 +219,7 @@ class PeriodPredictor:
         import numpy as np
         import plotly.graph_objects as go
         from plotly.io import to_html
+        from datetime import datetime
 
         # --------------------------------------------------
         # 1. Split date indices by calendar month
@@ -229,24 +230,26 @@ class PeriodPredictor:
             months.setdefault(key, []).append(i)
 
         figures = []
-
+        current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
         # --------------------------------------------------
         # 2. Create one figure per month
         # --------------------------------------------------
         for month, indices in months.items():
             indices = np.array(indices)
-
+            month_date = datetime.strptime(month + '-01', '%Y-%m-%d')
+            
+            # Skip if this is a past month (but not the current month)
+            if month_date < current_month and month_date.month != current_month.month:
+                continue
+                
             xs, ys = [], []
 
             # Monte Carlo scatter
             for sim_idx in range(simulations.shape[0]):
                 sim_days = np.where(simulations[sim_idx, indices])[0]
-
                 xs.extend(date_range[indices][sim_days])
-                ys.extend(
-                    sim_idx
-                    + np.random.uniform(-0.3, 0.3, size=len(sim_days))
-                )
+                ys.extend(sim_idx + np.random.uniform(-0.3, 0.3, size=len(sim_days)))
 
             fig = go.Figure()
 
