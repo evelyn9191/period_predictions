@@ -14,6 +14,11 @@ class PeriodPredictor:
         self.cycle_lengths = [cycle[2] for cycle in cycle_data]
         self.period_durations = [cycle[3] for cycle in cycle_data]
         self.last_period_start = cycle_data[0][0]
+        self.last_period_end = cycle_data[0][1]
+        self.last_cycle_length = cycle_data[0][2]
+        self.last_period_duration = cycle_data[0][3]
+        
+        self.current_period_start = self.last_period_end + timedelta(days=1)
         
         self.cycle_mu = np.mean(self.cycle_lengths)
         self.cycle_sigma = np.std(self.cycle_lengths)
@@ -34,8 +39,17 @@ class PeriodPredictor:
         date_range = pd.date_range(start=start_date, end=end_date)
         simulations = np.zeros((n_simulations, len(date_range)), dtype=bool)
         
+        current_period_end = self.current_period_start + timedelta(days=int(self.period_mu) - 1)
+        
+        for day in pd.date_range(start=self.current_period_start, end=min(current_period_end, end_date)):
+            if start_date <= day <= end_date:
+                idx = (date_range == day).argmax()
+                if idx < len(date_range):
+                    simulations[:, idx] = True
+        
         for sim in range(n_simulations):
-            current_period_start = start_date
+            first_cycle_length = max(20, int(np.random.normal(self.cycle_mu, self.cycle_sigma)))
+            current_period_start = self.current_period_start + timedelta(days=first_cycle_length)
             
             while current_period_start <= end_date:
                 cycle_length = max(20, int(np.random.normal(self.cycle_mu, self.cycle_sigma)))
